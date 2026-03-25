@@ -1,0 +1,15 @@
+# Zig
+.zig-cache/
+.zig-cache-profile/
+zig-out/
+*.o
+*.a
+
+# Build artifacts
+profile
+qjl
+*.trace/
+*.sample.txt
+
+# OS
+.DS_Store
