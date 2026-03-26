@@ -1,5 +1,7 @@
 # TurboQuant
 
+[![Star History Chart](https://api.star-history.com/image?repos=botirk38/turboquant&type=Date)](https://star-history.com/#botirk38/turboquant)
+
 A Zig implementation of Google's TurboQuant vector compression library based on the paper "TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate".
 
 ## Features
@@ -63,10 +65,6 @@ pub const Engine = struct {
 ![Compression Ratio](docs/assets/compression-ratio.png)
 
 ![Bits per Dimension](docs/assets/bits-per-dimension.png)
-
-## Star Growth
-
-[![Star History Chart](https://api.star-history.com/image?repos=botirk38/turboquant&type=Date)](https://star-history.com/#botirk38/turboquant)
 
 ## Building
 
