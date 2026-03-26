@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - 'turboquant/**'
       - '.github/workflows/**'
@@ -19,15 +19,23 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        target: [x86_64-linux, aarch64-macos, x86_64-windows]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux
+          - os: macos-latest
+            target: aarch64-macos
+          - os: windows-latest
+            target: x86_64-windows
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Zig
-        uses: karl-zylinski/zig-action@v1
+        uses: mlugg/setup-zig@v2
         with:
-          version: "0.15.2"
+          version: 0.15.2
 
       - name: Format Check
         working-directory: turboquant
@@ -35,11 +43,4 @@ jobs:
 
       - name: Run Tests
         working-directory: turboquant
-        run: |
-          TARGET="${{ matrix.os }}"
-          case "$TARGET" in
-            ubuntu-latest) TRIO="x86_64-linux" ;;
-            macos-latest) TRIO="aarch64-macos" ;;
-            windows-latest) TRIO="x86_64-windows" ;;
-          esac
-          zig test src/turboquant.zig -target "$TRIO"
+        run: zig test src/turboquant.zig -target ${{ matrix.target }}
