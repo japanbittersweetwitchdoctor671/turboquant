@@ -125,11 +125,13 @@ pub const Engine = struct {
             error.InvalidPayload => return DecodeError.InvalidPayload,
         };
 
-        const polar_decoded = polar.decode(allocator, payload.polar, dim, header.max_r) catch |err| switch (err) {
+        const polar_decoded = try allocator.alloc(f32, e.dim);
+        errdefer allocator.free(polar_decoded);
+
+        polar.decodeInto(polar_decoded, payload.polar, header.max_r) catch |err| switch (err) {
             error.InvalidDimension => return DecodeError.InvalidPayload,
             error.OutOfMemory => return DecodeError.OutOfMemory,
         };
-        errdefer allocator.free(polar_decoded);
 
         qjl.decodeInto(e.scratch_qjl_decoded, payload.qjl, header.gamma, &e.rot_op, &e.qjl_workspace);
 

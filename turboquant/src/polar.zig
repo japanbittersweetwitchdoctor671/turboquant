@@ -47,17 +47,15 @@ pub fn sinTable() *const [8]f32 {
     return &polar_sin_table;
 }
 
-fn findNearestAngleBucket(x: f32, y: f32) u3 {
-    var best_bucket: u3 = 0;
-    var best_dot: f32 = -1.0;
-    for (0..ANGLE_BUCKETS) |i| {
-        const dot = x * direction_vectors[i][0] + y * direction_vectors[i][1];
-        if (dot > best_dot) {
-            best_dot = dot;
-            best_bucket = @intCast(i);
-        }
+inline fn unpackOne(compressed: []const u8, bit_pos: usize) struct { r: f32, bucket: u3 } {
+    var combined: u7 = 0;
+    for (0..BITS_PER_PAIR) |j| {
+        const bit: u7 = @intCast((compressed[(bit_pos + j) / 8] >> @intCast((bit_pos + j) % 8)) & 1);
+        combined = (combined << 1) | bit;
     }
-    return best_bucket;
+    const r = @as(f32, @floatFromInt((combined >> THETA_BITS) & 0xF)) / R_LEVELS;
+    const bucket = @as(u3, @intCast(combined & 0x7));
+    return .{ .r = r, .bucket = bucket };
 }
 
 pub fn encode(
@@ -97,35 +95,27 @@ pub fn encode(
     return result;
 }
 
-pub fn decode(
-    allocator: std.mem.Allocator,
+pub fn decodeInto(
+    out: []f32,
     compressed: []const u8,
-    dim: usize,
     max_r: f32,
-) PolarError![]f32 {
+) PolarError!void {
+    const dim = out.len;
     if (dim == 0 or dim % 2 != 0) return PolarError.InvalidDimension;
 
     const num_pairs = dim / 2;
-    const result = try allocator.alloc(f32, dim);
-    errdefer allocator.free(result);
-
     var bit_pos: usize = 0;
+
     for (0..num_pairs) |i| {
-        var combined: u7 = 0;
-        for (0..BITS_PER_PAIR) |j| {
-            const bit: u7 = @intCast((compressed[(bit_pos + j) / 8] >> @intCast((bit_pos + j) % 8)) & 1);
-            combined = (combined << 1) | bit;
-        }
+        const unpacked = unpackOne(compressed, bit_pos);
         bit_pos += BITS_PER_PAIR;
 
-        const r = @as(f32, @floatFromInt((combined >> THETA_BITS) & 0xF)) / R_LEVELS * max_r;
-        const bucket = @as(u3, @intCast(combined & 0x7));
+        const r = unpacked.r * max_r;
+        const bucket = unpacked.bucket;
 
-        result[i * 2] = r * polar_cos_table[bucket];
-        result[i * 2 + 1] = r * polar_sin_table[bucket];
+        out[i * 2] = r * polar_cos_table[bucket];
+        out[i * 2 + 1] = r * polar_sin_table[bucket];
     }
-
-    return result;
 }
 
 pub fn dotProduct(
@@ -141,15 +131,11 @@ pub fn dotProduct(
     var bit_pos: usize = 0;
 
     for (0..num_pairs) |i| {
-        var combined: u7 = 0;
-        for (0..BITS_PER_PAIR) |j| {
-            const bit: u7 = @intCast((compressed[(bit_pos + j) / 8] >> @intCast((bit_pos + j) % 8)) & 1);
-            combined = (combined << 1) | bit;
-        }
+        const unpacked = unpackOne(compressed, bit_pos);
         bit_pos += BITS_PER_PAIR;
 
-        const r = @as(f32, @floatFromInt((combined >> THETA_BITS) & 0xF)) / R_LEVELS * max_r;
-        const bucket = @as(u3, @intCast(combined & 0x7));
+        const r = unpacked.r * max_r;
+        const bucket = unpacked.bucket;
 
         const dx = r * polar_cos_table[bucket];
         const dy = r * polar_sin_table[bucket];
@@ -158,6 +144,19 @@ pub fn dotProduct(
     }
 
     return sum;
+}
+
+fn findNearestAngleBucket(x: f32, y: f32) u3 {
+    var best_bucket: u3 = 0;
+    var best_dot: f32 = -1.0;
+    for (0..ANGLE_BUCKETS) |i| {
+        const dot = x * direction_vectors[i][0] + y * direction_vectors[i][1];
+        if (dot > best_dot) {
+            best_dot = dot;
+            best_bucket = @intCast(i);
+        }
+    }
+    return best_bucket;
 }
 
 test "encode rejects odd dimension" {
@@ -174,17 +173,17 @@ test "encode rejects zero dimension" {
     try std.testing.expectError(PolarError.InvalidDimension, result);
 }
 
-test "decode rejects odd dimension" {
-    const allocator = std.testing.allocator;
+test "decodeInto rejects odd dimension" {
     const compressed = [_]u8{0};
-    const result = decode(allocator, &compressed, 3, 1.0);
+    var out: [3]f32 = undefined;
+    const result = decodeInto(&out, &compressed, 1.0);
     try std.testing.expectError(PolarError.InvalidDimension, result);
 }
 
-test "decode rejects zero dimension" {
-    const allocator = std.testing.allocator;
+test "decodeInto rejects zero dimension" {
     const compressed = [_]u8{0};
-    const result = decode(allocator, &compressed, 0, 1.0);
+    var out: [0]f32 = undefined;
+    const result = decodeInto(&out, &compressed, 1.0);
     try std.testing.expectError(PolarError.InvalidDimension, result);
 }
 
@@ -196,8 +195,8 @@ test "encode decode roundtrip" {
     const encoded = try encode(allocator, &rotated, max_r);
     defer allocator.free(encoded);
 
-    const decoded = try decode(allocator, encoded, rotated.len, max_r);
-    defer allocator.free(decoded);
+    var decoded: [4]f32 = undefined;
+    try decodeInto(&decoded, encoded, max_r);
 
     try std.testing.expectEqual(rotated.len, decoded.len);
 }
@@ -211,8 +210,8 @@ test "dotProduct matches decoded dot" {
     const encoded = try encode(allocator, &rotated, max_r);
     defer allocator.free(encoded);
 
-    const decoded = try decode(allocator, encoded, rotated.len, max_r);
-    defer allocator.free(decoded);
+    var decoded: [4]f32 = undefined;
+    try decodeInto(&decoded, encoded, max_r);
 
     const decoded_dot = decoded[0] * q[0] + decoded[1] * q[1] + decoded[2] * q[2] + decoded[3] * q[3];
     const polar_dot = dotProduct(&q, encoded, max_r);
@@ -227,8 +226,8 @@ test "all zero encodes safely" {
     const encoded = try encode(allocator, &rotated, 1.0);
     defer allocator.free(encoded);
 
-    const decoded = try decode(allocator, encoded, rotated.len, 1.0);
-    defer allocator.free(decoded);
+    var decoded: [4]f32 = undefined;
+    try decodeInto(&decoded, encoded, 1.0);
 
     for (decoded) |v| {
         try std.testing.expectEqual(0.0, v);
