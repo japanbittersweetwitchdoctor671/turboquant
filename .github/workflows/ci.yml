@@ -39,7 +39,7 @@ jobs:
           TARGET="${{ matrix.os }}"
           case "$TARGET" in
             ubuntu-latest) TRIO="x86_64-linux" ;;
-            macos-latest) TRIO="x86_64-macos" ;;
+            macos-latest) TRIO="aarch64-macos" ;;
             windows-latest) TRIO="x86_64-windows" ;;
           esac
           zig test src/turboquant.zig -target "$TRIO"

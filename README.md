@@ -76,10 +76,10 @@ zig build-exe -O ReleaseFast -target aarch64-macos-none src/profile.zig
 ## Binary Format
 
 ```
-Header (23 bytes):
+Header (22 bytes):
 - version: u8
 - dim: u32
-- reserved: u8 (2 bytes)
+- reserved: u8
 - polar_bytes: u32
 - qjl_bytes: u32
 - max_r: f32

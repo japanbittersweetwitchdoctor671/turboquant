@@ -9,7 +9,6 @@ pub const FormatError = error{
 pub const Header = packed struct {
     version: u8,
     dim: u32,
-    method: u8,
     reserved: u8,
     polar_bytes: u32,
     qjl_bytes: u32,
@@ -32,32 +31,30 @@ pub fn writeHeader(
     out[0] = PAYLOAD_VERSION;
     std.mem.writeInt(u32, out[1..5], dim, .little);
     out[5] = 0;
-    out[6] = 0;
-    std.mem.writeInt(u32, out[7..11], polar_bytes, .little);
-    std.mem.writeInt(u32, out[11..15], qjl_bytes, .little);
+    std.mem.writeInt(u32, out[6..10], polar_bytes, .little);
+    std.mem.writeInt(u32, out[10..14], qjl_bytes, .little);
     const max_r_bits: u32 = @bitCast(max_r);
-    std.mem.writeInt(u32, out[15..19], max_r_bits, .little);
+    std.mem.writeInt(u32, out[14..18], max_r_bits, .little);
     const gamma_bits: u32 = @bitCast(gamma);
-    std.mem.writeInt(u32, out[19..23], gamma_bits, .little);
+    std.mem.writeInt(u32, out[18..22], gamma_bits, .little);
 }
 
 pub fn readHeader(data: []const u8) FormatError!Header {
     if (data.len < HEADER_SIZE) return FormatError.InvalidHeader;
     if (data[0] != PAYLOAD_VERSION) return FormatError.InvalidHeader;
-    if (data[5] != 0 or data[6] != 0) return FormatError.InvalidHeader;
+    if (data[5] != 0) return FormatError.InvalidHeader;
 
     const dim = std.mem.readInt(u32, data[1..5], .little);
-    const polar_bytes = std.mem.readInt(u32, data[7..11], .little);
-    const qjl_bytes = std.mem.readInt(u32, data[11..15], .little);
-    const max_r_bits = std.mem.readInt(u32, data[15..19], .little);
+    const polar_bytes = std.mem.readInt(u32, data[6..10], .little);
+    const qjl_bytes = std.mem.readInt(u32, data[10..14], .little);
+    const max_r_bits = std.mem.readInt(u32, data[14..18], .little);
     const max_r: f32 = @bitCast(max_r_bits);
-    const gamma_bits = std.mem.readInt(u32, data[19..23], .little);
+    const gamma_bits = std.mem.readInt(u32, data[18..22], .little);
     const gamma: f32 = @bitCast(gamma_bits);
 
     return Header{
         .version = data[0],
         .dim = dim,
-        .method = 0,
         .reserved = 0,
         .polar_bytes = polar_bytes,
         .qjl_bytes = qjl_bytes,
@@ -109,7 +106,7 @@ test "reject wrong version" {
     try std.testing.expectError(FormatError.InvalidHeader, result);
 }
 
-test "reject nonzero reserved bytes" {
+test "reject nonzero reserved byte" {
     var buf: [HEADER_SIZE]u8 = undefined;
     buf[0] = 1;
     buf[5] = 1;
